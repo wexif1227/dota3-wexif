@@ -19,9 +19,12 @@ namespace Rift.Editor
             string command=File.ReadAllText(file).Trim();File.Delete(file);
             try
             {
-                if(command=="setup")Setup();
+                if(command=="refresh")AssetDatabase.Refresh();
+                else if(command=="setup")Setup();
                 else if(command=="windows")Windows();
                 else if(command=="android")Android();
+                else if(command=="art")ArtAssets.Bake();
+                else if(command=="dota")DotaArt.Bake();
                 else if(command=="play"){Setup();EditorApplication.isPlaying=true;}
                 else if(command=="stop")EditorApplication.isPlaying=false;
                 else if(command=="smoke"&&Rift.Client.ArenaApp.Instance)Rift.Client.ArenaApp.Instance.StartLocal();
@@ -42,7 +45,7 @@ namespace Rift.Editor
             }
             else if(!EditorApplication.isPlaying)EditorSceneManager.OpenScene(scenePath);
             EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(scenePath,true)};
-            PlayerSettings.companyName="Wexif";PlayerSettings.productName="Rift — Dota3 Alpha";PlayerSettings.bundleVersion="0.1.0";
+            PlayerSettings.companyName="Wexif";PlayerSettings.productName="Rift — Dota3 Alpha";PlayerSettings.bundleVersion="0.2.0";
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android,"com.wexif.riftalpha");
             PlayerSettings.defaultScreenWidth=1600;PlayerSettings.defaultScreenHeight=900;PlayerSettings.fullScreenMode=FullScreenMode.FullScreenWindow;
             PlayerSettings.defaultInterfaceOrientation=UIOrientation.LandscapeLeft;PlayerSettings.runInBackground=true;
@@ -50,7 +53,8 @@ namespace Rift.Editor
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android,ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.forceInternetPermission=true;
             var graphics=new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]);var list=graphics.FindProperty("m_AlwaysIncludedShaders");
-            foreach(string name in new[]{"Rift/Terrain","Standard","Sprites/Default"})
+            for(int i=list.arraySize-1;i>=0;i--){var existing=list.GetArrayElementAtIndex(i).objectReferenceValue as Shader;if(existing&&existing.name=="Standard"){list.GetArrayElementAtIndex(i).objectReferenceValue=null;list.DeleteArrayElementAtIndex(i);}}
+            foreach(string name in new[]{"Rift/Terrain","Rift/Lit","Rift/Hero","Rift/Dota","Sprites/Default"})
             {
                 var shader=Shader.Find(name);if(!shader)continue;bool found=false;for(int i=0;i<list.arraySize;i++)if(list.GetArrayElementAtIndex(i).objectReferenceValue==shader)found=true;
                 if(!found){int index=list.arraySize;list.InsertArrayElementAtIndex(index);list.GetArrayElementAtIndex(index).objectReferenceValue=shader;}

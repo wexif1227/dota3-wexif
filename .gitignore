@@ -12,8 +12,12 @@
 !Server/*.csproj
 !Tests/*.csproj
 .vs/
+.vsconfig
 .idea/
 .DS_Store
 *.log
 .env
 artifacts/
+# Assets exported from the user's installed game stay in the local project.
+/Assets/Arena/Resources/DotaImported/
+/Assets/Arena/Resources/DotaImported.meta

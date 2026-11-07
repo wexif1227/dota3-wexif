@@ -7,3 +7,7 @@ Builds
 .git
 UserSettings
 Tests
+artifacts
+Assets/Arena/Resources
+Assets/Arena/Client
+Assets/Arena/Editor

@@ -13,7 +13,7 @@ var resolver=new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoReso
 resolver.Modifiers.Add(info=>
 {
     if(info.Type!=typeof(Unit))return;
-    foreach(string hidden in new[]{"path","home","goal","think","stashCount","attackTimer","waypoint","channelTarget","channelSpell","lastDamage","attacking","delivered"})
+    foreach(string hidden in new[]{"path","home","goal","think","stashCount","attackTimer","waypoint","channelTarget","channelSpell","lastDamage","attackWindup","acquireDelay","attackGoal","delivered"})
     {var property=info.Properties.FirstOrDefault(p=>p.Name==hidden);if(property!=null)info.Properties.Remove(property);}
     foreach(var property in info.Properties)if(new[]{"skills","items","stash","talents","cooldown","itemCooldown"}.Contains(property.Name))property.ShouldSerialize=(obj,value)=>((Unit)obj).kind==Kind.Hero;
 });
@@ -22,7 +22,7 @@ int nextPlayer=0;
 int maxRooms=int.TryParse(Environment.GetEnvironmentVariable("MAX_ROOMS"),out var limit)?Math.Clamp(limit,1,50):8;
 app.UseWebSockets(new WebSocketOptions{KeepAliveInterval=TimeSpan.FromSeconds(20)});
 app.MapGet("/",()=>Results.Content("RIFT / Dota3 community alpha server. GET /health, WebSocket /ws. No accounts or payments.","text/plain"));
-app.MapGet("/health",()=>Results.Json(new{status="ok",version="0.1.0",rooms=rooms.Count,protocol=1}));
+app.MapGet("/health",()=>Results.Json(new{status="ok",version="0.2.0",rooms=rooms.Count,protocol=1,attackWindup=true}));
 app.Map("/ws",async context=>
 {
     if(!context.WebSockets.IsWebSocketRequest){context.Response.StatusCode=400;return;}

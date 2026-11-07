@@ -26,7 +26,10 @@ namespace Rift.Core
         public V2 pos, goal, facing=new V2(1,1), home;
         public float hp,maxHp,mp,maxMp,damage,armor,speed,range,attackTimer,respawn,stun,slow,haste,immune,invisible,regen,life,channel,channelTotal,buyback,delivery,hitFlash,silence,reflect,hunger,lastDamage,think;
         public int target, channelTarget, channelSpell=-1, skillPoints=1, talentPoints, stashCount;
-        public bool bot, moving, rot, aghanim, shard, dead, attacking, delivered, aegis;
+        public int attackSequence,attackVictim,followTarget;
+        public float attackStarted,attackPoint,attackLength,attackWindup,acquireDelay;
+        public V2 attackGoal;
+        public bool bot, moving, rot, aghanim, shard, dead, attacking, delivered, aegis,attackMoving,holdPosition;
         public int[] skills=new int[6], items=new int[6], stash=new int[6], talents=new int[]{-1,-1,-1,-1};
         public float[] cooldown=new float[6], itemCooldown=new float[6];
         public List<V2> path=new List<V2>();
@@ -46,10 +49,10 @@ namespace Rift.Core
     }
     [Serializable] public class Effect
     {
-        public int id,team;
+        public int id,team,source,target;
         public string type="";
         public V2 a,b;
-        public float radius,time=.5f;
+        public float radius,time=.5f,duration;
     }
     [Serializable] public class Snapshot
     {

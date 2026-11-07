@@ -14,6 +14,8 @@ namespace Rift.Core
         public float Time;
         int nextId=1,nextEffect=1,wave=-1,runeWave=-1,campWave=-1;
         readonly Random random=new Random(123);
+        sealed class FlyingAttack{public Unit source,target;public float damage,remaining;}
+        readonly List<FlyingAttack> flyingAttacks=new List<FlyingAttack>();
         public Match(int size=5,int difficulty=1){Size=size==1||size==2?size:5;Difficulty=Math.Max(0,Math.Min(2,difficulty));}
         public Player AddPlayer(int id,string name,int hero,int team)
         {
@@ -76,16 +78,21 @@ namespace Rift.Core
             {if(u.delivery>0)return "Курьер уже в пути";if(!u.stash.Any(i=>i!=0))return "Тайник пуст";var c=Spawn(Kind.Courier,u.team,BattleMap.Bases[u.team]);c.owner=u.id;c.speed=12;c.hp=c.maxHp=180;c.life=90;u.delivery=V2.Distance(c.pos,u.pos)/c.speed+1;return "";}
             if(u.dead)return "Герой погиб";
             if(u.stun>0)return "Герой оглушён";
-            if(o.type=="move"){Cancel(u);u.target=0;u.invisible=0;Move(u,o.Point);return "";}
-            if(o.type=="stop"){Cancel(u);u.moving=false;u.path.Clear();u.target=0;return "";}
+            if(o.type=="move"||o.type=="attackmove")
+            {Cancel(u);u.target=0;u.followTarget=0;u.acquireDelay=0;u.holdPosition=false;u.attackMoving=o.type=="attackmove";u.attackGoal=BattleMap.Free(o.Point);u.invisible=0;Move(u,o.Point);return "";}
+            if(o.type=="stop"||o.type=="hold")
+            {Cancel(u);u.moving=false;u.path.Clear();u.target=u.followTarget=0;u.attackMoving=false;u.holdPosition=o.type=="hold";u.acquireDelay=o.type=="stop"?float.MaxValue:0;return "";}
+            if(o.type=="follow")
+            {var friend=Find(o.target);if(friend==null||friend.dead||friend.id==u.id||friend.team!=u.team)return "Нельзя следовать за целью";Cancel(u);u.target=0;u.followTarget=friend.id;u.acquireDelay=0;u.attackMoving=u.holdPosition=false;return "";}
             if(o.type=="attack")
-            {var t=Find(o.target);if(t==null||t.dead||!Visible(t,u.team))return "Цель не видна";if(t.team==u.team&&(t.kind!=Kind.Creep||t.hp>t.maxHp*.5f))return "Добивание доступно ниже 50% HP";Cancel(u);u.target=t.id;u.moving=false;return "";}
+            {var t=Find(o.target);if(t==null||t.dead||t.id==u.id||t.kind==Kind.Web||t.kind==Kind.Rune||!Visible(t,u.team))return "Цель не видна";if(t.team==u.team&&(t.kind!=Kind.Creep||t.hp>t.maxHp*.5f))return "Добивание доступно ниже 50% HP";if(u.target!=t.id)Cancel(u);u.target=t.id;u.followTarget=0;u.acquireDelay=0;u.attackMoving=u.holdPosition=false;u.moving=false;u.path.Clear();return "";}
             if(o.type=="cast")return Cast(u,o.slot,o.Point,o.target);
             if(o.type=="item")return UseItem(u,o.slot,o.Point,o.target);
             return "Неизвестная команда";
         }
-        void Cancel(Unit u){u.channel=0;u.channelSpell=-1;u.channelTarget=0;}
-        public void Move(Unit u,V2 p){u.goal=BattleMap.Free(p);u.path=BattleMap.Path(u.pos,u.goal);u.moving=u.path.Count>0;}
+        void Cancel(Unit u){u.channel=0;u.channelSpell=-1;u.channelTarget=0;CancelAttack(u);}
+        void CancelAttack(Unit u){if(u.attackWindup>0)u.attackTimer=0;u.attackWindup=0;u.attackVictim=0;u.attacking=false;}
+        public void Move(Unit u,V2 p){p=BattleMap.Free(p);if(u.moving&&u.path.Count>0&&V2.Distance(u.goal,p)<.35f)return;u.goal=p;u.path=BattleMap.Path(u.pos,u.goal);u.moving=u.path.Count>0;}
         public void Tick(float dt)
         {
             if(Phase!="playing")return;dt=Math.Max(0,Math.Min(.1f,dt));Time+=dt;
@@ -95,7 +102,8 @@ namespace Rift.Core
             int cw=(int)(Time/60);if(cw>campWave){campWave=cw;SpawnCamps();}
             foreach(var u in Units.ToArray())
             {
-                Dec(ref u.attackTimer,dt);Dec(ref u.stun,dt);Dec(ref u.slow,dt);Dec(ref u.haste,dt);Dec(ref u.immune,dt);Dec(ref u.hitFlash,dt);Dec(ref u.buyback,dt);Dec(ref u.silence,dt);Dec(ref u.reflect,dt);Dec(ref u.hunger,dt);Dec(ref u.regen,dt);Dec(ref u.lastDamage,dt);
+                Dec(ref u.attackTimer,dt);Dec(ref u.acquireDelay,dt);Dec(ref u.stun,dt);Dec(ref u.slow,dt);Dec(ref u.haste,dt);Dec(ref u.immune,dt);Dec(ref u.hitFlash,dt);Dec(ref u.buyback,dt);Dec(ref u.silence,dt);Dec(ref u.reflect,dt);Dec(ref u.hunger,dt);Dec(ref u.regen,dt);Dec(ref u.lastDamage,dt);
+                if(u.attackTimer<=0&&u.attackWindup<=0)u.attacking=false;
                 for(int i=0;i<6;i++){Dec(ref u.cooldown[i],dt);Dec(ref u.itemCooldown[i],dt);}
                 if(u.kind==Kind.Courier&&!u.dead)
                 {
@@ -111,36 +119,59 @@ namespace Rift.Core
                     Stats(u);u.hp=Math.Min(u.maxHp,u.hp+dt*(1.6f+u.level*.15f+(u.regen>0?25:0)+(Catalog.Has(u,24)?u.maxHp*.012f:0)));u.mp=Math.Min(u.maxMp,u.mp+dt*(1.2f+u.level*.08f));
                     if(V2.Distance(u.pos,BattleMap.Bases[u.team])<10){u.hp=Math.Min(u.maxHp,u.hp+dt*u.maxHp*.16f);u.mp=Math.Min(u.maxMp,u.mp+dt*u.maxMp*.2f);Deliver(u);}
                     if((int)(Time*2)!=(int)((Time-dt)*2))u.gold++;
-                    if(u.bot)Bot(u,dt);
+                    if(u.bot&&u.stun<=0&&u.channel<=0)Bot(u,dt);
                     if(u.rot){Area(u,u.pos,u.aghanim?7:4,(22+u.skills[1]*18)*dt,false,1);u.hp=Math.Max(1,u.hp-20*dt);}
                     if(Catalog.Has(u,34))Area(u,u.pos,6,45*dt,false);
                     foreach(var web in Units)if(web.kind==Kind.Web&&!web.dead&&web.team==u.team&&V2.Distance(u.pos,web.pos)<8){u.haste=Math.Max(u.haste,.15f);u.hp=Math.Min(u.maxHp,u.hp+12*dt);}
                 }
-                if(u.channel>0){Channel(u,dt);continue;}
+                if(u.channel>0){CancelAttack(u);Channel(u,dt);continue;}
                 if(u.kind==Kind.Trap){var enemy=Nearest(u,5);if(enemy!=null){var owner=Find(u.owner);if(owner!=null)Area(owner,u.pos,6,150+owner.level*6,false,4,owner.shard?1.5f:0);Fx("trap",u.pos,u.pos,6,u.team);u.dead=true;}continue;}
                 if(u.kind==Kind.Rune||u.kind==Kind.Web||u.kind==Kind.Ward)continue;
-                if(u.stun>0)continue;
+                if(u.stun>0){CancelAttack(u);u.moving=false;continue;}
                 if(u.kind==Kind.Hero||u.kind==Kind.Creep||u.kind==Kind.Summon||u.kind==Kind.Neutral||u.kind==Kind.Roshan||u.kind==Kind.Tower)CombatMove(u,dt);
             }
             foreach(var rune in Units.Where(u=>u.kind==Kind.Rune&&!u.dead).ToArray())
             foreach(var h in Units.Where(u=>u.kind==Kind.Hero&&!u.dead))if(V2.Distance(h.pos,rune.pos)<2){if(rune.hero==0){h.gold+=100;h.haste=20;}else{h.hp=Math.Min(h.maxHp,h.hp+350);h.mp=Math.Min(h.maxMp,h.mp+250);}rune.dead=true;Fx("rune",rune.pos,rune.pos,3,h.team);break;}
+            foreach(var projectile in flyingAttacks.ToArray())
+            {
+                projectile.remaining-=dt;if(projectile.remaining>0)continue;
+                if(!projectile.target.dead)ResolveAttack(projectile.source,projectile.target,projectile.damage);
+                flyingAttacks.Remove(projectile);
+            }
             Units.RemoveAll(u=>u.dead&&u.kind!=Kind.Hero&&u.kind!=Kind.Roshan&&u.kind!=Kind.Tower&&u.kind!=Kind.Barracks&&u.kind!=Kind.Ancient);
         }
         static void Dec(ref float x,float dt){if(x>0)x=Math.Max(0,x-dt);}
-        void Revive(Unit u){u.dead=false;u.hp=u.maxHp;u.mp=u.maxMp;u.pos=BattleMap.Bases[u.team];u.goal=u.pos;u.moving=false;u.target=0;u.stun=u.slow=u.silence=u.invisible=0;Cancel(u);u.rot=false;}
+        void Revive(Unit u){u.dead=false;u.hp=u.maxHp;u.mp=u.maxMp;u.pos=BattleMap.Bases[u.team];u.goal=u.pos;u.moving=false;u.target=u.followTarget=0;u.attackMoving=u.holdPosition=false;u.path.Clear();u.stun=u.slow=u.silence=u.invisible=0;Cancel(u);u.rot=false;}
         void CombatMove(Unit u,float dt)
         {
-            if(u.invisible>0)return;
+            if(u.invisible>0&&u.target==0)return;
+            if(u.attackWindup>0)
+            {
+                var victim=Find(u.attackVictim);
+                if(victim==null||victim.dead||!Visible(victim,u.team)||V2.Distance(u.pos,victim.pos)>u.range+1){CancelAttack(u);return;}
+                u.facing=(victim.pos-u.pos).Normal;u.attackWindup=Math.Max(0,u.attackWindup-dt);
+                if(u.attackWindup<=0)Attack(u,victim);
+                return;
+            }
+            if(u.followTarget!=0)
+            {
+                var friend=Find(u.followTarget);
+                if(friend==null||friend.dead){u.followTarget=0;u.moving=false;u.path.Clear();return;}
+                if(V2.Distance(u.pos,friend.pos)>3){if(!u.moving||V2.Distance(u.goal,friend.pos)>1)Move(u,friend.pos);}
+                else{u.moving=false;u.path.Clear();u.facing=(friend.pos-u.pos).Normal;}
+            }
             var target=Find(u.target);
             if(target!=null&&(target.dead||!Visible(target,u.team)||V2.Distance(u.pos,target.pos)>28&&u.kind!=Kind.Hero)){u.target=0;target=null;}
-            if(target==null&&!u.moving)target=Nearest(u,u.kind==Kind.Tower?u.range:Math.Max(u.range,8));
+            if(target==null&&u.acquireDelay<=0&&u.followTarget==0&&(!u.moving||u.attackMoving))target=Nearest(u,u.kind==Kind.Tower||u.holdPosition?u.range:Math.Max(u.range,8));
             if(target!=null)
             {
                 float distance=V2.Distance(u.pos,target.pos);
-                if(distance<=u.range){u.facing=(target.pos-u.pos).Normal;if(u.attackTimer<=0)Attack(u,target);return;}
-                if(u.kind!=Kind.Tower && (!u.moving||u.target!=0))
+                if(distance<=u.range){u.moving=false;u.path.Clear();u.facing=(target.pos-u.pos).Normal;if(u.attackTimer<=0)BeginAttack(u,target);return;}
+                if(u.kind!=Kind.Tower&&!u.holdPosition && (!u.moving||u.target!=0||u.attackMoving))
                 {if(!u.moving||V2.Distance(u.goal,target.pos)>3)Move(u,target.pos);}
             }
+            else if(u.attackMoving&&!u.moving)
+            {if(V2.Distance(u.pos,u.attackGoal)>1)Move(u,u.attackGoal);else u.attackMoving=false;}
             if(!u.moving&&(u.kind==Kind.Creep||u.kind==Kind.Summon))
             {
                 var lane=BattleMap.Lanes[u.lane];int step=u.team==0?1:-1;u.waypoint=Math.Max(0,Math.Min(lane.Length-1,u.waypoint));
@@ -164,12 +195,23 @@ namespace Rift.Core
                 if(V2.Distance(u.pos,ally.pos)<sight){if(u.invisible<=0&&!(u.kind==Kind.Trap))return true;if(ally.kind==Kind.Tower||(ally.kind==Kind.Ward&&ally.hero==1))return true;}}
             return false;
         }
+        public static float AttackPeriod(Unit u)=>u.kind==Kind.Hero?Math.Max(.45f,1.1f-u.level*.015f):1.25f;
+        public static float AttackPoint(Unit u)=>Math.Min(AttackPeriod(u)*.65f,u.kind!=Kind.Hero?.3f:new[]{.35f,.5f,.3f,.3f,.55f,.4f}[Math.Max(0,Math.Min(5,u.hero))]);
+        void BeginAttack(Unit u,Unit t)
+        {
+            u.attackTimer=u.attackLength=AttackPeriod(u);u.attackPoint=u.attackWindup=AttackPoint(u);u.attackStarted=Time;u.attackVictim=t.id;u.attackSequence++;u.attacking=true;
+        }
         void Attack(Unit u,Unit t)
         {
             if(t.team==u.team&&(t.kind!=Kind.Creep||t.hp>t.maxHp*.5f)){u.target=0;return;}
-            u.attackTimer=u.kind==Kind.Hero?Math.Max(.45f,1.1f-u.level*.015f):1.25f;u.attacking=true;
             float damage=u.damage;u.stashCount++;if(u.kind==Kind.Hero){if(u.hunger>0)damage*=1.55f;if(u.hero==2&&u.shield>0)damage+=25+u.skills[0]*10;if(u.hero==2&&u.invisible>0){damage+=80+u.skills[1]*35;u.invisible=0;}if(Catalog.Has(u,22)&&u.stashCount%4==0)damage*=2;}
-            Damage(u,t,damage,true);Fx(u.range>4?"bolt":"hit",u.pos,t.pos,1,u.team);
+            bool ranged=u.range>4;float flight=ranged?Math.Max(.12f,Math.Min(.65f,V2.Distance(u.pos,t.pos)/25)):0;
+            if(ranged)flyingAttacks.Add(new FlyingAttack{source=u,target=t,damage=damage,remaining=flight});else ResolveAttack(u,t,damage);
+            Fx(ranged?"bolt":"hit",u.pos,t.pos,1,u.team);var hit=Effects[Effects.Count-1];hit.source=u.id;hit.target=t.id;hit.duration=flight;if(ranged)hit.time=flight+.1f;
+        }
+        void ResolveAttack(Unit u,Unit t,float damage)
+        {
+            Damage(u,t,damage,true);
             if(u.kind==Kind.Hero)
             {
                 if(u.hunger>0||Catalog.Has(u,25))u.hp=Math.Min(u.maxHp,u.hp+damage*(u.hunger>0?.65f:.2f));
