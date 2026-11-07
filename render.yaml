@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: dota3-wexif
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: MAX_ROOMS
+        value: "8"
