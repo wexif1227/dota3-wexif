@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using Rift.Client;
@@ -82,6 +83,22 @@ namespace Rift.Editor
                 {
                     Check(sawWalk,"imported skeletal run animation played");Check(sawAttack,"imported skeletal attack animation played");
                     app.Local.Command(1,new Order{type="stop"});Check(!own.attacking,"stop cancels current attack pose");
+                    var fx=app.World.Models[own.id].GetComponent<CosmeticEffects>();Check(fx&&fx.systems.Any(p=>p.particleCount>0),"cosmetic emitters run in a live match");
+                    own.dead=true;own.hp=0;own.respawn=99;app.State=app.Local.View(1);stage++;next=EditorApplication.timeSinceStartup+.4;return;
+                }
+                if(stage==10)
+                {
+                    var fx=app.World.Models[own.id].GetComponent<CosmeticEffects>();Check(fx.systems.All(p=>!p.isPlaying&&p.particleCount==0),"hero death clears cosmetic particles");
+                    own.dead=false;own.hp=own.maxHp;own.respawn=0;app.State=app.Local.View(1);stage++;next=EditorApplication.timeSinceStartup+.7;return;
+                }
+                if(stage==11)
+                {
+                    var liveModel=app.World.Models[own.id];var fx=liveModel.GetComponent<CosmeticEffects>();Check(fx.systems.Any(p=>p.particleCount>0),"hero respawn restores cosmetics");
+                    liveModel.SetActive(false);Check(fx.systems.All(p=>p.particleCount==0),"hidden model leaves no orphan cosmetic particles");liveModel.SetActive(true);stage++;next=EditorApplication.timeSinceStartup+.7;return;
+                }
+                if(stage==12)
+                {
+                    var fx=app.World.Models[own.id].GetComponent<CosmeticEffects>();Check(fx.systems.Any(p=>p.particleCount>0),"reactivated model restarts cosmetic emitters");
                     File.WriteAllText("artifacts/controls-playtest.txt",checks+" checks passed");Debug.Log("RIFT_CONTROLS_OK "+checks+" checks passed");EditorApplication.update-=Drive;EditorApplication.Exit(0);
                 }
             }

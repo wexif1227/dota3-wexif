@@ -60,6 +60,7 @@ ranged.Command(1,new Order{type="move",x=-20,y=0});Advance(ranged,.35f);Check(ra
 var stopped=Duel();stopped.Command(1,new Order{type="stop"});Advance(stopped,2);Check(stopped.Hero(1).attackSequence==0,"stop does not immediately resume auto attack");
 var meld=Duel();var assassin=meld.Hero(1);assassin.hero=2;meld.Stats(assassin);assassin.invisible=999;assassin.skills[1]=1;meld.Command(1,new Order{type="attack",target=meld.Hero(2).id});Advance(meld,.7f);Check(assassin.invisible==0&&meld.Hero(2).hp<meld.Hero(2).maxHp,"Templar Assassin can attack out of Meld");
 var stunnedBot=Duel();var bot=stunnedBot.Hero(2);bot.hero=3;bot.bot=true;bot.skills[0]=1;stunnedBot.Stats(bot);float botMana=bot.mp;V2 victimPosition=stunnedBot.Hero(1).pos;Advance(stunnedBot,.1f);Check(bot.mp>=botMana&&V2.Distance(stunnedBot.Hero(1).pos,victimPosition)<.01f,"stunned bot cannot cast a hook or issue combat orders");
+BehaviorChecks.Run(Check);
 var simulation=Setup(5);simulation.Hero(1).bot=true;simulation.Hero(2).bot=true;
 var watch=System.Diagnostics.Stopwatch.StartNew();for(int i=0;i<12000;i++)simulation.Tick(.05f);
 Check(simulation.Units.All(u=>!float.IsNaN(u.pos.x)&&!float.IsNaN(u.hp)),"10 minute simulation finite");

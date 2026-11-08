@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 using Rift.Core;
 namespace Rift.Client
 {
-    public class WorldView : MonoBehaviour
+    public partial class WorldView : MonoBehaviour
     {
         public Camera Camera;
         public RenderTexture Portrait;
@@ -26,7 +26,7 @@ namespace Rift.Client
         float nextVision;
         readonly HashSet<int> seenUnits=new HashSet<int>();
         public static Vector3 Position(V2 p,float offset=0)=>new Vector3(p.x,Height(p.x,p.y)+offset,p.y);
-        public static float Height(float x,float z){float river=Mathf.Abs(x+z)/1.414f;return river<3?-.6f:Mathf.SmoothStep(-.6f,.4f,Mathf.Clamp01((river-3)/3))+.22f*Mathf.Sin(x*.15f)*Mathf.Cos(z*.13f);}
+        public static float Height(float x,float z)=>BattleMap.Height(x,z);
         Material Mat(string hex,bool glow=false)
         {
             string key=hex+(glow?"g":"");if(materials.TryGetValue(key,out var m))return m;
@@ -44,23 +44,7 @@ namespace Rift.Client
             terrainRoot=new GameObject("The Shattered Vale / terrain");Ground();
             Shape(PrimitiveType.Cube,"Outer wilderness","263C37",new Vector3(0,-1.4f,0),new Vector3(400,1,400),terrainRoot.transform);
             var rimRandom=new System.Random(97);for(int i=0;i<180;i++){float angle=i*Mathf.PI*2/180;float distance=67+(float)rimRandom.NextDouble()*24;var p=new Vector3(Mathf.Cos(angle)*distance,-.9f,Mathf.Sin(angle)*distance);if(Mathf.Abs(p.x)<61&&Mathf.Abs(p.z)<61)continue;Cone(terrainRoot.transform,p,2+(float)rimRandom.NextDouble()*2,5+(float)rimRandom.NextDouble()*6,Mat(i%2==0?"344B46":"415750"),6);}
-            var water=Shape(PrimitiveType.Cube,"River","2E7080",new Vector3(0,-.35f,0),new Vector3(6,.08f,169),terrainRoot.transform);water.transform.rotation=Quaternion.Euler(0,-45,0);
-            foreach(var lane in BattleMap.Lanes)for(int i=1;i<lane.Length;i++)PathStrip(lane[i-1],lane[i],4.6f,"8E846B");
-            var random=new System.Random(718);
-            foreach(var p in BattleMap.Trees)
-            {
-                float s=.8f+(float)random.NextDouble()*.8f;var root=new GameObject("Tree");root.transform.SetParent(terrainRoot.transform);root.transform.position=Position(p);
-                bool dire=p.x+p.y>0;Shape(PrimitiveType.Cylinder,"Trunk",dire?"57484B":"5E4F36",new Vector3(0,1.4f*s,0),new Vector3(.35f*s,1.4f*s,.35f*s),root.transform);
-                for(int layer=0;layer<3;layer++)Cone(root.transform,new Vector3(0,(2+layer*.9f)*s,0),(2.2f-layer*.4f)*s,2.8f*s,Mat(dire?(layer%2==0?"425B68":"526772"):(layer%2==0?"386C57":"598766")),7);
-            }
-            foreach(var camp in BattleMap.Camps){Ring(terrainRoot.transform,Position(camp,.04f),5,.14f,Mat("9E9778"));for(int i=0;i<5;i++){float a=i*1.256f;Shape(PrimitiveType.Sphere,"Camp stone","68706E",Position(camp+new V2(Mathf.Cos(a)*5,Mathf.Sin(a)*5)),new Vector3(1,.7f,1.4f),terrainRoot.transform);}}
-            for(int team=0;team<2;team++)
-            {
-                var p=BattleMap.Bases[team];Shape(PrimitiveType.Cylinder,"Base terrace",team==0?"7C9B90":"716D83",Position(p,-.3f),new Vector3(23,.35f,23),terrainRoot.transform);
-                Ring(terrainRoot.transform,Position(p,.1f),10,.2f,Mat(team==0?"85D9BC":"DF9688",true));
-                for(int i=0;i<6;i++){float a=i*Mathf.PI/3;var q=p+new V2(Mathf.Cos(a)*11,Mathf.Sin(a)*11);Shape(PrimitiveType.Cube,"Ancient pillar",team==0?"A8B6A1":"777385",Position(q,2.2f),new Vector3(.7f,4.5f,.7f),terrainRoot.transform);Shape(PrimitiveType.Sphere,"Brazier",team==0?"91E8C4":"FF865C",Position(q,4.7f),Vector3.one*.8f,terrainRoot.transform,true);}
-            }
-            for(int i=0;i<34;i++){float x=-56+i*3.4f;Shape(PrimitiveType.Sphere,"River rock","5A6C74",Position(new V2(x,-x+5.5f),-.15f),new Vector3(2,.8f,1.4f),terrainRoot.transform);}
+            BuildArchitecture();
             Batch(terrainRoot);
             Portrait=new RenderTexture(768,864,24);portraitCamera=new GameObject("Hero Portrait Camera").AddComponent<Camera>();portraitCamera.cullingMask=1<<8;portraitCamera.targetTexture=Portrait;portraitCamera.clearFlags=CameraClearFlags.SolidColor;portraitCamera.backgroundColor=new Color(.045f,.065f,.08f);portraitCamera.orthographic=true;portraitCamera.orthographicSize=3.15f;portraitCamera.transform.position=new Vector3(1000,3.8f,-10);portraitCamera.transform.LookAt(new Vector3(1000,2.35f,0));
             SelectHero(0);
@@ -87,10 +71,10 @@ namespace Rift.Client
         {
             var go=new GameObject("Ring",typeof(LineRenderer));go.transform.SetParent(parent,false);var lr=go.GetComponent<LineRenderer>();lr.useWorldSpace=false;lr.positionCount=65;lr.widthMultiplier=thickness;lr.sharedMaterial=mat;for(int i=0;i<65;i++){float a=i*Mathf.PI/32;lr.SetPosition(i,pos+new Vector3(Mathf.Cos(a)*radius,0,Mathf.Sin(a)*radius));}
         }
-        void PathStrip(V2 a,V2 b,float width,string color)
+        void PathStrip(V2 a,V2 b,float width,string color,float lift=.04f)
         {
             int n=Mathf.CeilToInt(V2.Distance(a,b)/2);V2 dir=(b-a).Normal,side=new V2(-dir.y,dir.x)*width*.5f;
-            var v=new Vector3[(n+1)*2];var t=new int[n*6];for(int i=0;i<=n;i++){V2 p=a+(b-a)*(i/(float)n);v[i*2]=Position(p-side,.035f);v[i*2+1]=Position(p+side,.035f);if(i<n){int k=i*6,j=i*2;t[k]=j;t[k+1]=j+1;t[k+2]=j+2;t[k+3]=j+1;t[k+4]=j+3;t[k+5]=j+2;}}
+            var v=new Vector3[(n+1)*2];var t=new int[n*6];for(int i=0;i<=n;i++){V2 p=a+(b-a)*(i/(float)n);v[i*2]=Position(p-side,lift);v[i*2+1]=Position(p+side,lift);if(i<n){int k=i*6,j=i*2;t[k]=j;t[k+1]=j+1;t[k+2]=j+2;t[k+3]=j+1;t[k+4]=j+3;t[k+5]=j+2;}}
             var mesh=new Mesh{vertices=v,triangles=t};mesh.RecalculateNormals();var obj=new GameObject("Stone lane",typeof(MeshFilter),typeof(MeshRenderer));obj.transform.SetParent(terrainRoot.transform);obj.GetComponent<MeshFilter>().sharedMesh=mesh;obj.GetComponent<MeshRenderer>().sharedMaterial=Mat(color);
         }
         void Batch(GameObject root)
@@ -117,7 +101,7 @@ namespace Rift.Client
             {
                 var unit=pair.Value;if(unit.dead||unit.kind==Kind.Web||unit.kind==Kind.Rune||!Models.TryGetValue(unit.id,out var model)||!model.activeSelf)continue;
                 var renderers=model.GetComponentsInChildren<Renderer>();Bounds bounds=new Bounds(model.transform.position+Vector3.up,Vector3.one);
-                bool found=false;foreach(var renderer in renderers){if(renderer is LineRenderer||!renderer.enabled)continue;if(!found){bounds=renderer.bounds;found=true;}else bounds.Encapsulate(renderer.bounds);}
+                bool found=false;foreach(var renderer in renderers){if(renderer is LineRenderer||renderer is TrailRenderer||renderer is ParticleSystemRenderer||!renderer.enabled)continue;if(!found){bounds=renderer.bounds;found=true;}else bounds.Encapsulate(renderer.bounds);}
                 if(!found)continue;
                 bounds.Expand(.15f);
                 if(bounds.IntersectRay(ray,out float distance))
@@ -130,7 +114,7 @@ namespace Rift.Client
                 }
                 // Health bars remain clickable even when the cursor is just above the mesh.
                 var bar=Camera.WorldToScreenPoint(Position(unit.pos,unit.kind==Kind.Hero?4.8f:unit.kind==Kind.Tower?7:3));
-                float width=(unit.kind==Kind.Hero?90:54)*Screen.width/1600f;
+                float width=(unit.kind==Kind.Hero?84:unit.kind==Kind.Creep?28:unit.kind==Kind.Tower?64:36)*Screen.width/1600f;
                 if(bar.z>0&&Mathf.Abs(bar.x-screen.x)<width*.5f&&Mathf.Abs(bar.y-screen.y)<12){float score=-10000+Mathf.Abs(bar.x-screen.x);if(score<bestScore){bestScore=score;best=unit;}}
             }
             return best;
@@ -164,13 +148,13 @@ namespace Rift.Client
             if(u.kind==Kind.Tower){Shape(PrimitiveType.Cylinder,"Foundation","707B7D",new Vector3(0,.4f,0),new Vector3(4,.4f,4),r);Shape(PrimitiveType.Cube,"Tower",team,new Vector3(0,2,0),new Vector3(2.3f,3.8f,2.3f),r);Cone(r,new Vector3(0,4,0),1.9f,2,Mat("3D515D"),4);Shape(PrimitiveType.Sphere,"Beacon",team,new Vector3(0,5.5f,0),Vector3.one*.9f,r,true);}
             if(u.kind==Kind.Ancient){Shape(PrimitiveType.Cylinder,"Ancient dais","6D7884",new Vector3(0,.5f,0),new Vector3(8,.5f,8),r);for(int i=0;i<5;i++){float a=i*Mathf.PI*2/5;Cone(r,new Vector3(Mathf.Cos(a)*2,1,Mathf.Sin(a)*2),1.3f,3+i%2,Mat(team,true),5);}Cone(r,Vector3.up,2,7,Mat(team,true),6);}
             if(u.kind==Kind.Barracks){Shape(PrimitiveType.Cube,"Barracks",team,new Vector3(0,1.3f,0),new Vector3(4,2.5f,3),r);Cone(r,new Vector3(0,2.5f,0),3,1.5f,Mat("4B5360"),4);}
-            if(u.kind==Kind.Creep||u.kind==Kind.Neutral||u.kind==Kind.Summon){Shape(PrimitiveType.Capsule,"Body",u.kind==Kind.Neutral?"A48F73":team,new Vector3(0,.9f,0),new Vector3(.8f,1,1),r);Shape(PrimitiveType.Sphere,"Helmet","57606C",new Vector3(0,1.8f,0),Vector3.one*.65f,r);Limb(r,"C2C7BE",new Vector3(.6f,.4f,0),new Vector3(.6f,2.4f,.3f),.08f);if(u.kind==Kind.Summon&&u.hero==1)Cone(r,new Vector3(0,1,0),1,2,Mat("689467"),6);}
+            if(u.kind==Kind.Creep||u.kind==Kind.Neutral||u.kind==Kind.Summon)BuildSoldier(g,u,team);
             if(u.kind==Kind.Roshan){Shape(PrimitiveType.Sphere,"Roshan","79748A",new Vector3(0,2,0),new Vector3(4,4,3),r);for(int s=-1;s<=1;s+=2){Limb(r,"60566A",new Vector3(s*1.5f,3,0),new Vector3(s*3,.5f,1),.6f);Cone(r,new Vector3(s,3.5f,0),.5f,2,Mat("C6B9A2"),5);}}
             if(u.kind==Kind.Courier){Shape(PrimitiveType.Sphere,"Courier",team,new Vector3(0,2,0),new Vector3(.8f,.7f,1.3f),r);for(int s=-1;s<=1;s+=2)Shape(PrimitiveType.Cube,"Wing","D3C8A0",new Vector3(s*.9f,2.1f,0),new Vector3(1.4f,.12f,.8f),r);Shape(PrimitiveType.Cube,"Delivery chest","A48557",new Vector3(0,1.5f,0),Vector3.one*.6f,r);}
             if(u.kind==Kind.Ward){Limb(r,"A58D64",Vector3.zero,Vector3.up*2.4f,.15f);Shape(PrimitiveType.Sphere,"Eye",u.hero==1?"87B8EE":"E9C877",Vector3.up*2.4f,new Vector3(1,.7f,.7f),r,true);}
             if(u.kind==Kind.Web){Ring(r,new Vector3(0,.06f,0),8,.06f,Mat("BDB6D5"));for(int i=0;i<8;i++){float a=i*Mathf.PI/4;Limb(r,"BDB6D5",new Vector3(0,.06f,0),new Vector3(Mathf.Cos(a)*8,.06f,Mathf.Sin(a)*8),.035f);}}
             if(u.kind==Kind.Trap||u.kind==Kind.Rune){Ring(r,new Vector3(0,.2f,0),1.2f,.12f,Mat(u.kind==Kind.Trap?"D29DEB":"EBCF72",true));Cone(r,Vector3.up*.3f,.7f,1.3f,Mat("B4A8F5",true),4);}
-            if(u.kind!=Kind.Web&&u.kind!=Kind.Rune)Ring(r,new Vector3(0,.08f,0),u.kind==Kind.Hero?1.5f:1,.09f,Mat(team,true));
+            if(u.kind!=Kind.Web&&u.kind!=Kind.Rune)Ring(r,new Vector3(0,.08f,0),u.kind==Kind.Hero?1.15f:u.kind==Kind.Creep?.68f:1,.09f,Mat(team,true));
             return g;
         }
         public void Sync(Snapshot snapshot)
@@ -211,8 +195,10 @@ namespace Rift.Client
             {
                 if(!Models.TryGetValue(pair.Key,out var model)||!model.activeSelf)continue;var u=pair.Value;var pos=Position(u.pos);if(u.kind==Kind.Creep)pos.y+=Mathf.Sin(UnityEngine.Time.time*7+u.id)*(u.moving?.09f:.025f);
                 model.transform.position=Vector3.Lerp(model.transform.position,pos,1-Mathf.Exp(-UnityEngine.Time.deltaTime*15));
+                var soldier=model.GetComponent<CreepMotion>();if(soldier)soldier.Sync(u);
                 var motion=model.GetComponent<HeroMotion>();if(motion)motion.Sync(u);
                 var imported=model.GetComponent<ImportedHeroMotion>();if(imported)imported.Sync(u);
+                var cosmetics=model.GetComponent<CosmeticEffects>();if(cosmetics)cosmetics.SetAlive(!u.dead);
                 if(u.facing.Length>.01f)model.transform.rotation=Quaternion.Slerp(model.transform.rotation,Quaternion.LookRotation(new Vector3(u.facing.x,0,u.facing.y)),UnityEngine.Time.deltaTime*12);
             }
             if(preview)preview.transform.rotation=Quaternion.Euler(0,155+Mathf.Sin(UnityEngine.Time.time*.3f)*12,0);

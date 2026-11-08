@@ -28,7 +28,10 @@ namespace Rift.Core
         public int target, channelTarget, channelSpell=-1, skillPoints=1, talentPoints, stashCount;
         public int attackSequence,attackVictim,followTarget;
         public float attackStarted,attackPoint,attackLength,attackWindup,acquireDelay;
-        public V2 attackGoal;
+        public V2 attackGoal,aggroOrigin;
+        public int formationSlot,aggroTarget;
+        public float repath,aggroUntil;
+        public bool retreating,returning,manualTarget;
         public bool bot, moving, rot, aghanim, shard, dead, attacking, delivered, aegis,attackMoving,holdPosition;
         public int[] skills=new int[6], items=new int[6], stash=new int[6], talents=new int[]{-1,-1,-1,-1};
         public float[] cooldown=new float[6], itemCooldown=new float[6];

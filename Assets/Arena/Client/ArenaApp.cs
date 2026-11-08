@@ -198,7 +198,7 @@ namespace Rift.Client
         {
             Box(0,0,1600,uiHeight,new Color(.02f,.04f,.05f,.74f));Box(0,0,250,uiHeight,bg);
             Text("R I F T",38,42,200,70,42,gold);Text("THE SHATTERED VALE",40,107,190,30,12,muted);Line(40,155,170);
-            Text("DOTA 3 / COMMUNITY ALPHA",40,uiHeight-90,190,40,11,muted);Text("BUILD 0.2.0   •   UNITY",40,uiHeight-48,190,30,11,muted);
+            Text("DOTA 3 / COMMUNITY ALPHA",40,uiHeight-90,190,40,11,muted);Text("BUILD 0.3.0   •   UNITY",40,uiHeight-48,190,30,11,muted);
             if(Button("ИГРАТЬ",28,200,194,52,menuTab==0))menuTab=0;
             if(Button("ГЕРОИ",28,264,194,52,menuTab==1))menuTab=1;
             if(Button("КАК ИГРАТЬ",28,328,194,52))help=true;
@@ -285,11 +285,23 @@ namespace Rift.Client
         void Bar(float x,float y,float w,float h,float fraction,Color color){Box(x,y,w,h,new Color(.11f,.15f,.16f));Box(x,y,w*Mathf.Clamp01(fraction),h,color);}
         void DrawHealthBars()
         {
-            foreach(var u in State.units){if(u.dead||u.kind==Kind.Web||u.kind==Kind.Rune||u.kind==Kind.Trap)continue;var p=World.Camera.WorldToScreenPoint(WorldView.Position(u.pos,u.kind==Kind.Hero?4.8f:u.kind==Kind.Tower?7:3));if(p.z<0)continue;float x=p.x/scale,y=(Screen.height-p.y)/scale;if(y<65||y>uiHeight-185)continue;float w=u.kind==Kind.Hero?84:48;Bar(x-w/2,y,w,6,u.hp/u.maxHp,u.team==Me.team?mint:new Color(.8f,.35f,.3f));if(u.kind==Kind.Hero){Text(u.name,x-80,y-25,160,24,12,ink,TextAnchor.MiddleCenter);if(u.channel>0)Bar(x-w/2,y+9,w,3,u.channel/u.channelTotal,gold);}}
+            foreach(var u in State.units){if(u.dead||u.kind==Kind.Web||u.kind==Kind.Rune||u.kind==Kind.Trap)continue;var p=World.Camera.WorldToScreenPoint(WorldView.Position(u.pos,u.kind==Kind.Hero?4.8f:u.kind==Kind.Tower?7:3));if(p.z<0)continue;float x=p.x/scale,y=(Screen.height-p.y)/scale;if(y<65||y>uiHeight-185)continue;float w=u.kind==Kind.Hero?84:u.kind==Kind.Creep?28:u.kind==Kind.Tower?64:36;Bar(x-w/2,y,w,6,u.hp/u.maxHp,u.team==Me.team?mint:new Color(.8f,.35f,.3f));if(u.kind==Kind.Hero){Text(u.name,x-80,y-25,160,24,12,ink,TextAnchor.MiddleCenter);if(u.channel>0)Bar(x-w/2,y+9,w,3,u.channel/u.channelTotal,gold);}}
         }
         void BuildMinimap()
         {
-            minimap=new Texture2D(128,128,TextureFormat.RGB24,false);for(int y=0;y<128;y++)for(int x=0;x<128;x++){float px=x/127f*120-60,py=y/127f*120-60;var color=px+py<0?new Color(.12f,.24f,.2f):new Color(.21f,.2f,.25f);if(Mathf.Abs(px+py)<7)color=new Color(.18f,.34f,.39f);foreach(var lane in BattleMap.Lanes)for(int i=1;i<lane.Length;i++)if(BattleMap.Segment(new V2(px,py),lane[i-1],lane[i])<2.5f)color=new Color(.45f,.43f,.33f);minimap.SetPixel(x,y,color);}minimap.Apply();
+            minimap=new Texture2D(128,128,TextureFormat.RGB24,false);
+            for(int y=0;y<128;y++)for(int x=0;x<128;x++)
+            {
+                var point=new V2(x/127f*120-60,y/127f*120-60);var color=point.x+point.y<0?new Color(.12f,.24f,.2f):new Color(.21f,.2f,.25f);
+                if(Mathf.Abs(point.x+point.y)<7)color=new Color(.18f,.34f,.39f);
+                if(!BattleMap.Walkable(point))color*=.6f;
+                foreach(var route in BattleMap.JungleRoutes)for(int i=1;i<route.Length;i++)if(BattleMap.Segment(point,route[i-1],route[i])<1.6f)color=new Color(.3f,.34f,.25f);
+                foreach(var lane in BattleMap.Lanes)for(int i=1;i<lane.Length;i++)if(BattleMap.Segment(point,lane[i-1],lane[i])<2.8f)color=new Color(.51f,.5f,.41f);
+                foreach(var camp in BattleMap.Camps)if(V2.Distance(point,camp)<2)color=new Color(.65f,.55f,.3f);
+                if(V2.Distance(point,BattleMap.Roshan)<4)color=new Color(.6f,.3f,.37f);
+                minimap.SetPixel(x,y,color);
+            }
+            minimap.Apply();
         }
         void MiniMap(float x,float y,float w)
         {

@@ -48,7 +48,7 @@ namespace Rift.Core
                     var b=Spawn(Kind.Barracks,team,points[team==0?0:6]+new V2(lane==2?-3:3,lane==0?-3:3));b.lane=lane;b.hp=b.maxHp=1400;b.armor=8;b.name="Barracks";
                 }
             }
-            var roshan=Spawn(Kind.Roshan,2,new V2(-13,13));roshan.name="Roshan";roshan.hp=roshan.maxHp=6500;roshan.damage=120;roshan.armor=16;roshan.range=3;roshan.speed=4;
+            var roshan=Spawn(Kind.Roshan,2,BattleMap.Roshan);roshan.name="Roshan";roshan.hp=roshan.maxHp=6500;roshan.damage=120;roshan.armor=16;roshan.range=3;roshan.speed=4;
             Log("Битва началась. Защитите свой Древний.");
         }
         public Unit Spawn(Kind kind,int team,V2 pos)
@@ -79,13 +79,13 @@ namespace Rift.Core
             if(u.dead)return "Герой погиб";
             if(u.stun>0)return "Герой оглушён";
             if(o.type=="move"||o.type=="attackmove")
-            {Cancel(u);u.target=0;u.followTarget=0;u.acquireDelay=0;u.holdPosition=false;u.attackMoving=o.type=="attackmove";u.attackGoal=BattleMap.Free(o.Point);u.invisible=0;Move(u,o.Point);return "";}
+            {Cancel(u);u.target=0;u.followTarget=0;u.acquireDelay=0;u.holdPosition=false;u.manualTarget=false;u.retreating=false;u.attackMoving=o.type=="attackmove";u.attackGoal=BattleMap.Free(o.Point);u.invisible=0;Move(u,o.Point);return "";}
             if(o.type=="stop"||o.type=="hold")
-            {Cancel(u);u.moving=false;u.path.Clear();u.target=u.followTarget=0;u.attackMoving=false;u.holdPosition=o.type=="hold";u.acquireDelay=o.type=="stop"?float.MaxValue:0;return "";}
+            {Cancel(u);u.moving=false;u.path.Clear();u.target=u.followTarget=0;u.manualTarget=false;u.attackMoving=false;u.holdPosition=o.type=="hold";u.acquireDelay=o.type=="stop"?float.MaxValue:0;return "";}
             if(o.type=="follow")
             {var friend=Find(o.target);if(friend==null||friend.dead||friend.id==u.id||friend.team!=u.team)return "Нельзя следовать за целью";Cancel(u);u.target=0;u.followTarget=friend.id;u.acquireDelay=0;u.attackMoving=u.holdPosition=false;return "";}
             if(o.type=="attack")
-            {var t=Find(o.target);if(t==null||t.dead||t.id==u.id||t.kind==Kind.Web||t.kind==Kind.Rune||!Visible(t,u.team))return "Цель не видна";if(t.team==u.team&&(t.kind!=Kind.Creep||t.hp>t.maxHp*.5f))return "Добивание доступно ниже 50% HP";if(u.target!=t.id)Cancel(u);u.target=t.id;u.followTarget=0;u.acquireDelay=0;u.attackMoving=u.holdPosition=false;u.moving=false;u.path.Clear();return "";}
+            {var t=Find(o.target);if(t==null||t.dead||t.id==u.id||t.kind==Kind.Web||t.kind==Kind.Rune||!Visible(t,u.team))return "Цель не видна";if(t.team==u.team&&(t.kind!=Kind.Creep||t.hp>t.maxHp*.5f))return "Добивание доступно ниже 50% HP";if(u.target!=t.id)Cancel(u);u.retreating=false;u.target=t.id;u.manualTarget=true;u.followTarget=0;u.acquireDelay=0;u.attackMoving=u.holdPosition=false;u.moving=false;u.path.Clear();return "";}
             if(o.type=="cast")return Cast(u,o.slot,o.Point,o.target);
             if(o.type=="item")return UseItem(u,o.slot,o.Point,o.target);
             return "Неизвестная команда";
@@ -100,9 +100,10 @@ namespace Rift.Core
             int w=(int)(Time/30);if(w>wave){wave=w;SpawnWave();}
             int rw=(int)(Time/120);if(rw>runeWave){runeWave=rw;SpawnRunes();}
             int cw=(int)(Time/60);if(cw>campWave){campWave=cw;SpawnCamps();}
+            IndexUnits();
             foreach(var u in Units.ToArray())
             {
-                Dec(ref u.attackTimer,dt);Dec(ref u.acquireDelay,dt);Dec(ref u.stun,dt);Dec(ref u.slow,dt);Dec(ref u.haste,dt);Dec(ref u.immune,dt);Dec(ref u.hitFlash,dt);Dec(ref u.buyback,dt);Dec(ref u.silence,dt);Dec(ref u.reflect,dt);Dec(ref u.hunger,dt);Dec(ref u.regen,dt);Dec(ref u.lastDamage,dt);
+                Dec(ref u.repath,dt);Dec(ref u.attackTimer,dt);Dec(ref u.acquireDelay,dt);Dec(ref u.stun,dt);Dec(ref u.slow,dt);Dec(ref u.haste,dt);Dec(ref u.immune,dt);Dec(ref u.hitFlash,dt);Dec(ref u.buyback,dt);Dec(ref u.silence,dt);Dec(ref u.reflect,dt);Dec(ref u.hunger,dt);Dec(ref u.regen,dt);Dec(ref u.lastDamage,dt);
                 if(u.attackTimer<=0&&u.attackWindup<=0)u.attacking=false;
                 for(int i=0;i<6;i++){Dec(ref u.cooldown[i],dt);Dec(ref u.itemCooldown[i],dt);}
                 if(u.kind==Kind.Courier&&!u.dead)
@@ -130,6 +131,7 @@ namespace Rift.Core
                 if(u.stun>0){CancelAttack(u);u.moving=false;continue;}
                 if(u.kind==Kind.Hero||u.kind==Kind.Creep||u.kind==Kind.Summon||u.kind==Kind.Neutral||u.kind==Kind.Roshan||u.kind==Kind.Tower)CombatMove(u,dt);
             }
+            ResolveCrowding(dt);
             foreach(var rune in Units.Where(u=>u.kind==Kind.Rune&&!u.dead).ToArray())
             foreach(var h in Units.Where(u=>u.kind==Kind.Hero&&!u.dead))if(V2.Distance(h.pos,rune.pos)<2){if(rune.hero==0){h.gold+=100;h.haste=20;}else{h.hp=Math.Min(h.maxHp,h.hp+350);h.mp=Math.Min(h.maxMp,h.mp+250);}rune.dead=true;Fx("rune",rune.pos,rune.pos,3,h.team);break;}
             foreach(var projectile in flyingAttacks.ToArray())
@@ -141,53 +143,7 @@ namespace Rift.Core
             Units.RemoveAll(u=>u.dead&&u.kind!=Kind.Hero&&u.kind!=Kind.Roshan&&u.kind!=Kind.Tower&&u.kind!=Kind.Barracks&&u.kind!=Kind.Ancient);
         }
         static void Dec(ref float x,float dt){if(x>0)x=Math.Max(0,x-dt);}
-        void Revive(Unit u){u.dead=false;u.hp=u.maxHp;u.mp=u.maxMp;u.pos=BattleMap.Bases[u.team];u.goal=u.pos;u.moving=false;u.target=u.followTarget=0;u.attackMoving=u.holdPosition=false;u.path.Clear();u.stun=u.slow=u.silence=u.invisible=0;Cancel(u);u.rot=false;}
-        void CombatMove(Unit u,float dt)
-        {
-            if(u.invisible>0&&u.target==0)return;
-            if(u.attackWindup>0)
-            {
-                var victim=Find(u.attackVictim);
-                if(victim==null||victim.dead||!Visible(victim,u.team)||V2.Distance(u.pos,victim.pos)>u.range+1){CancelAttack(u);return;}
-                u.facing=(victim.pos-u.pos).Normal;u.attackWindup=Math.Max(0,u.attackWindup-dt);
-                if(u.attackWindup<=0)Attack(u,victim);
-                return;
-            }
-            if(u.followTarget!=0)
-            {
-                var friend=Find(u.followTarget);
-                if(friend==null||friend.dead){u.followTarget=0;u.moving=false;u.path.Clear();return;}
-                if(V2.Distance(u.pos,friend.pos)>3){if(!u.moving||V2.Distance(u.goal,friend.pos)>1)Move(u,friend.pos);}
-                else{u.moving=false;u.path.Clear();u.facing=(friend.pos-u.pos).Normal;}
-            }
-            var target=Find(u.target);
-            if(target!=null&&(target.dead||!Visible(target,u.team)||V2.Distance(u.pos,target.pos)>28&&u.kind!=Kind.Hero)){u.target=0;target=null;}
-            if(target==null&&u.acquireDelay<=0&&u.followTarget==0&&(!u.moving||u.attackMoving))target=Nearest(u,u.kind==Kind.Tower||u.holdPosition?u.range:Math.Max(u.range,8));
-            if(target!=null)
-            {
-                float distance=V2.Distance(u.pos,target.pos);
-                if(distance<=u.range){u.moving=false;u.path.Clear();u.facing=(target.pos-u.pos).Normal;if(u.attackTimer<=0)BeginAttack(u,target);return;}
-                if(u.kind!=Kind.Tower&&!u.holdPosition && (!u.moving||u.target!=0||u.attackMoving))
-                {if(!u.moving||V2.Distance(u.goal,target.pos)>3)Move(u,target.pos);}
-            }
-            else if(u.attackMoving&&!u.moving)
-            {if(V2.Distance(u.pos,u.attackGoal)>1)Move(u,u.attackGoal);else u.attackMoving=false;}
-            if(!u.moving&&(u.kind==Kind.Creep||u.kind==Kind.Summon))
-            {
-                var lane=BattleMap.Lanes[u.lane];int step=u.team==0?1:-1;u.waypoint=Math.Max(0,Math.Min(lane.Length-1,u.waypoint));
-                if(V2.Distance(u.pos,lane[u.waypoint])<3)u.waypoint=Math.Max(0,Math.Min(lane.Length-1,u.waypoint+step));
-                Move(u,lane[u.waypoint]);
-            }
-            if((u.kind==Kind.Neutral||u.kind==Kind.Roshan)&&V2.Distance(u.pos,u.home)>12){u.target=0;Move(u,u.home);u.hp=Math.Min(u.maxHp,u.hp+dt*80);}
-            if(u.moving&&u.path.Count>0)
-            {
-                V2 delta=u.path[0]-u.pos;float speed=u.speed*(u.slow>0?.55f:1)*(u.haste>0?1.5f:1);float step=speed*dt;u.facing=delta.Normal;
-                if(delta.Length<=step){u.pos=u.path[0];u.path.RemoveAt(0);if(u.path.Count==0)u.moving=false;}else u.pos+=delta.Normal*step;
-                if(u.kind==Kind.Hero)u.invisible=0;
-            }
-        }
-        Unit Nearest(Unit u,float range)
-        {Unit best=null;float d=range;foreach(var t in Units){if(t.dead||t.team==u.team||t.kind==Kind.Web||t.kind==Kind.Rune||t.kind==Kind.Trap||!Visible(t,u.team))continue;if(u.team!=2&&t.team==2&&u.kind!=Kind.Hero)continue;float x=V2.Distance(u.pos,t.pos);if(x<d){best=t;d=x;}}return best;}
+        void Revive(Unit u){u.dead=false;u.hp=u.maxHp;u.mp=u.maxMp;u.pos=BattleMap.Bases[u.team];u.goal=u.pos;u.moving=false;u.target=u.followTarget=0;u.attackMoving=u.holdPosition=u.manualTarget=u.retreating=false;u.path.Clear();u.stun=u.slow=u.silence=u.invisible=0;Cancel(u);u.rot=false;}
         public bool Visible(Unit u,int team)
         {
             if(u.team==team)return true;if(u.dead)return false;
@@ -199,7 +155,7 @@ namespace Rift.Core
         public static float AttackPoint(Unit u)=>Math.Min(AttackPeriod(u)*.65f,u.kind!=Kind.Hero?.3f:new[]{.35f,.5f,.3f,.3f,.55f,.4f}[Math.Max(0,Math.Min(5,u.hero))]);
         void BeginAttack(Unit u,Unit t)
         {
-            u.attackTimer=u.attackLength=AttackPeriod(u);u.attackPoint=u.attackWindup=AttackPoint(u);u.attackStarted=Time;u.attackVictim=t.id;u.attackSequence++;u.attacking=true;
+            u.attackTimer=u.attackLength=AttackPeriod(u);u.attackPoint=u.attackWindup=AttackPoint(u);u.attackStarted=Time;u.attackVictim=t.id;u.attackSequence++;u.attacking=true;RaiseAggro(u,t);
         }
         void Attack(Unit u,Unit t)
         {
@@ -232,6 +188,7 @@ namespace Rift.Core
             if(Units.Any(h=>h.kind==Kind.Hero&&h.hero==1&&h.team!=target.team&&!h.dead&&h.skills[4]>0&&V2.Distance(h.pos,target.pos)<12))armor-=4;
             if(Units.Any(h=>h.team==target.team&&!h.dead&&Catalog.Has(h,35)&&V2.Distance(h.pos,target.pos)<12))armor+=3;
             if(physical)amount*=1-.06f*armor/(1+.06f*Math.Abs(armor));else amount*=.75f;
+            RaiseAggro(source,target);
             target.hp-=amount;target.hitFlash=.2f;target.lastDamage=3;
             if(target.channelSpell==20)Cancel(target);
             if(target.reflect>0&&!reflected&&source!=null)Damage(target,source,amount*.7f,false,true);
@@ -267,31 +224,14 @@ namespace Rift.Core
         void SpawnWave()
         {
             for(int team=0;team<2;team++)for(int lane=0;lane<3;lane++){if(Size==1&&lane!=1)continue;bool mega=Units.Any(b=>b.kind==Kind.Barracks&&b.team!=team&&b.lane==lane&&b.dead);
-                for(int i=0;i<4;i++){var u=Spawn(Kind.Creep,team,BattleMap.Lanes[lane][team==0?0:6]+new V2(i*.6f,0));u.lane=lane;u.waypoint=team==0?1:5;u.hp=u.maxHp=(mega?600:330)+wave*8;u.damage=(mega?45:22)+wave;u.range=i==3?7:1.8f;u.hero=i==3?1:0;}}
+                for(int i=0;i<4;i++){var u=Spawn(Kind.Creep,team,BattleMap.Lanes[lane][team==0?0:6]+new V2(i*.6f,0));u.lane=lane;u.formationSlot=i;u.pos=u.goal=u.home=BattleMap.LanePoint(lane,team==0?0:6,team,i);u.waypoint=team==0?1:5;u.hp=u.maxHp=(mega?600:330)+wave*8;u.damage=(mega?45:22)+wave;u.range=i==3?7:1.8f;u.hero=i==3?1:0;}}
         }
-        void SpawnCamps(){foreach(var c in BattleMap.Camps){if(Units.Any(u=>u.kind==Kind.Neutral&&!u.dead&&V2.Distance(u.home,c)<4))continue;for(int i=0;i<2;i++){var n=Spawn(Kind.Neutral,2,c+new V2(i*2,0));n.hp=n.maxHp=450;n.damage=30;n.name="Forest guardian";}}}
-        void SpawnRunes(){foreach(var u in Units)if(u.kind==Kind.Rune)u.dead=true;for(int i=0;i<2;i++){var r=Spawn(Kind.Rune,2,new V2(i==0?-22:22,i==0?22:-22));r.hero=(runeWave+i)%2;r.name=r.hero==0?"Bounty / Haste":"Regeneration";}}
+        void SpawnCamps(){foreach(var c in BattleMap.Camps){if(Units.Any(u=>u.kind==Kind.Neutral&&!u.dead&&V2.Distance(u.home,c)<4))continue;for(int i=0;i<2;i++){var n=Spawn(Kind.Neutral,2,c+new V2(i*2,0));n.home=c;n.formationSlot=i;n.hp=n.maxHp=450;n.damage=30;n.name="Forest guardian";}}}
+        void SpawnRunes(){foreach(var u in Units)if(u.kind==Kind.Rune)u.dead=true;for(int i=0;i<2;i++){var r=Spawn(Kind.Rune,2,BattleMap.Runes[i]);r.hero=(runeWave+i)%2;r.name=r.hero==0?"Bounty / Haste":"Regeneration";}}
         public Snapshot View(int player)
         {
             var p=Players.Find(x=>x.id==player);int team=p!=null?p.team:0;
             return new Snapshot{room=Room,phase=Phase,you=player,host=Host,size=Size,difficulty=Difficulty,winner=Winner,time=Time,players=Players.ToList(),units=Units.Where(u=>Visible(u,team)).ToList(),effects=Effects.Where(e=>e.team==team||Units.Any(u=>u.team==team&&!u.dead&&V2.Distance(u.pos,e.a)<20)).ToList(),feed=Feed.ToList(),radiantKills=Units.Where(u=>u.kind==Kind.Hero&&u.team==0).Sum(u=>u.kills),direKills=Units.Where(u=>u.kind==Kind.Hero&&u.team==1).Sum(u=>u.kills)};
-        }
-        void Bot(Unit u,float dt)
-        {
-            u.think-=dt;if(u.think>0)return;u.think=Difficulty==0?1.4f:Difficulty==1?.7f:.3f;
-            for(int k=0;k<6;k++){int slot=k==3?5:k==5?3:k;if(u.skillPoints>0)Learn(u,slot);}
-            for(int t=0;t<4;t++)if(u.talentPoints>0)Talent(u,t,random.Next(2));
-            if(u.gold>500){int[] build={8,10,19,18,21,24};foreach(int id in build)if(!Catalog.Has(u,id)&&!u.stash.Contains(id)){Buy(u,id);break;}if(u.delivery<=0&&u.stash.Any(i=>i!=0))Command(u.owner,new Order{type="courier"});}
-            if(u.hp<u.maxHp*(Difficulty==0?.18f:.32f)){u.target=0;Move(u,BattleMap.Bases[u.team]);return;}
-            var enemy=Nearest(u,16);
-            if(enemy!=null)
-            {
-                if(Difficulty>0&&enemy.kind==Kind.Creep){var low=Units.Find(t=>t.kind==Kind.Creep&&!t.dead&&t.team!=u.team&&t.hp<u.damage*1.3f&&V2.Distance(u.pos,t.pos)<12);if(low!=null)enemy=low;}
-                u.target=enemy.id;
-                if(Difficulty>0&&enemy.team!=2)for(int slot=0;slot<6;slot++)if(!Catalog.Heroes[u.hero].abilities[slot].passive&&u.cooldown[slot]<=0){Cast(u,slot,enemy.pos,enemy.id);}
-                return;
-            }
-            if(u.moving)return;var lane=BattleMap.Lanes[u.lane];int index=0;float nearest=float.MaxValue;for(int i=0;i<lane.Length;i++){float d=V2.Distance(u.pos,lane[i]);if(d<nearest){nearest=d;index=i;}}index=Math.Max(0,Math.Min(lane.Length-1,index+(u.team==0?1:-1)));Move(u,lane[index]);
         }
     }
 }

@@ -1,10 +1,11 @@
 """Run with Blender --background --factory-startup --python this-file.
 Converts local Source 2 Viewer glTF exports to Unity FBX, retaining a shared rig.
 """
-import bpy, json, pathlib, shutil, re
+import bpy, json, pathlib, shutil, re,sys,argparse
 ROOT=pathlib.Path(__file__).resolve().parent.parent
-SOURCE=ROOT/'artifacts/dota-export/models/heroes'
-OUTPUT=ROOT/'Assets/Arena/Resources/DotaImported'
+parser=argparse.ArgumentParser();parser.add_argument('--source',default='artifacts/dota-export/models/heroes');parser.add_argument('--output',default='Assets/Arena/Resources/DotaImported');parser.add_argument('--hero',type=int,choices=range(6));options=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
+SOURCE=ROOT/options.source
+OUTPUT=ROOT/options.output
 HEROES=[
  ('broodmother',['broodmother_abdomen','broodmother_hair','broodmother_legs']),
  ('shadow_fiend',['shadow_fiend_arms','shadow_fiend_head','shadow_fiend_shoulders','shadow_fiend_wings']),
@@ -22,9 +23,20 @@ PREFERRED={
  'furion':['idle_anim','run_anim','attack_anim','attack_altB_anim','attack_altC_anim','cast_sprout','cast_teleportation','cast_wrath_of_nature','death','generic_channel']
 }
 for hero,(name,parts) in enumerate(HEROES):
+ if options.hero is not None and options.hero!=hero:continue
  bpy.ops.wm.read_factory_settings(use_empty=True)
  folder=SOURCE/name
  data=json.loads((folder/(name+'.gltf')).read_text())
+ material_defs={}
+ for part in [name]+parts:
+  part_data=json.loads((folder/(part+'.gltf')).read_text())
+  def texture(slot):
+   if not slot:return ''
+   return part_data['images'][part_data['textures'][slot['index']]['source']]['uri']
+  for material in part_data.get('materials',[]):
+   albedo=texture(material.get('pbrMetallicRoughness',{}).get('baseColorTexture'))
+   vmat=material.get('extras',{}).get('vmat',{})
+   material_defs[material['name']]={'albedo':albedo,'normal':texture(material.get('normalTexture')),'hidden':'nothing' in albedo.lower() or 'invisible' in material['name'].lower(),'alphaMode':material.get('alphaMode','OPAQUE'),'cutoff':material.get('alphaCutoff',.5),'additive':bool(vmat.get('IntParams',{}).get('F_ADDITIVE_BLEND',0))}
  animations=data.get('animations',[])
  # Exclude additive gestures/taunts. Keep the full poses used by gameplay.
  wanted=[]
@@ -34,6 +46,8 @@ for hero,(name,parts) in enumerate(HEROES):
   for animation in choices[:limit]:
    if animation not in wanted:wanted.append(animation)
  preferred=[a for key in PREFERRED[name] for a in animations if a.get('name')==key]
+ if name=='pudge' and any(a.get('name')=='arc_mid_pudge_idle' for a in animations):
+  preferred=[a for key in ['arc_mid_pudge_idle','arc_mid_pudge_walkN','arc_mid_cleave_attack_01','arc_mid_attack02','arc_attack_alt_1','arc_mid_pudge_meathook_start','arc_mid_pudge_meathook_end','arc_mid_death','arc_generic_channel'] for a in animations if a.get('name')==key]
  data['animations']=preferred if len(preferred)>=5 else wanted
  compact=folder/(name+'_gameplay.gltf');compact.write_text(json.dumps(data))
  bpy.ops.import_scene.gltf(filepath=str(compact),import_pack_images=False)
@@ -60,20 +74,11 @@ for hero,(name,parts) in enumerate(HEROES):
  out=OUTPUT/('Hero'+str(hero));out.mkdir(parents=True,exist_ok=True)
  material_info=[]
  for material in bpy.data.materials:
-  maps={}
-  if material.use_nodes:
-   for node in material.node_tree.nodes:
-    if node.type!='TEX_IMAGE' or not node.image:continue
-    image=node.image;source=pathlib.Path(bpy.path.abspath(image.filepath))
-    if source.exists():
-     destination=out/source.name
-     if not destination.exists():shutil.copy2(source,destination)
-     image.filepath=str(destination)
-     for link in node.outputs.get('Color',node.outputs[0]).links:
-      maps[link.to_socket.name]=destination.name
-     if not maps.get('base') and ('color' in source.name.lower() or 'diffuse' in source.name.lower()):maps['base']=destination.name
-     if 'normal' in source.name.lower():maps['normal']=destination.name
-  material_info.append({'name':material.name,'albedo':maps.get('base',''),'normal':maps.get('normal',''),'textures':maps})
+  definition=material_defs.get(material.name) or material_defs.get(re.sub(r'\.\d{3}$','',material.name))
+  if not definition:raise RuntimeError('Unmapped material '+material.name)
+  for key in ['albedo','normal']:
+   if definition[key]:shutil.copy2(folder/definition[key],out/definition[key])
+  material_info.append({'name':material.name,**definition})
  bpy.ops.object.select_all(action='SELECT')
  bpy.ops.export_scene.fbx(filepath=str(out/('Hero'+str(hero)+'.fbx')),use_selection=True,object_types={'ARMATURE','MESH'},add_leaf_bones=False,bake_anim=True,bake_anim_use_all_actions=True,bake_anim_use_nla_strips=False,bake_anim_simplify_factor=.15,path_mode='RELATIVE',axis_forward='-Z',axis_up='Y')
  metadata={'hero':hero,'name':name,'animations':[a.name for a in base_actions],'materials':material_info,'meshes':[o.name for o in bpy.context.scene.objects if o.type=='MESH']}
