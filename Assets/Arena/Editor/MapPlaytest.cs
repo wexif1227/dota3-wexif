@@ -32,8 +32,10 @@ namespace Rift.Editor
                 {
                     ShowAll();Shader.SetGlobalFloat("_RiftFog",0);var camera=app.World.Camera;camera.transform.position=new Vector3(0,135,-90);camera.transform.LookAt(Vector3.zero);camera.orthographicSize=74;
                     Capture(camera,"artifacts/map-overview.png",1536,1536);camera.transform.position=new Vector3(0,43,-30);camera.transform.LookAt(new Vector3(0,0,1));camera.orthographicSize=25;Capture(camera,"artifacts/map-mid.png",1600,1000);
+                    camera.transform.position=new Vector3(-45,32,-73);camera.transform.LookAt(new Vector3(-43,1,-43));camera.orthographicSize=18;Capture(camera,"artifacts/minify-base.png",1600,1000);
                     var creeps=app.Local.Units.Where(u=>!u.dead&&u.kind==Kind.Creep).ToArray();if(creeps.Length<8)throw new Exception("Missing active waves");
-                    if(app.World.Models.Values.Count(g=>g.GetComponent<CreepMotion>())<8)throw new Exception("Missing soldier animation components");
+                    if(creeps.Count(u=>app.World.Models.TryGetValue(u.id,out var g)&&(g.GetComponent<CreepMotion>()||g.GetComponent<ImportedHeroMotion>()))<8)throw new Exception("Missing soldier animation components");
+                    foreach(var creep in creeps){var body=app.World.Models[creep.id].GetComponentInChildren<SkinnedMeshRenderer>();if(body&&(body.bounds.size.y<.5f||body.bounds.size.magnitude>12))throw new Exception("Incorrect live creep bounds "+body.bounds);}
                     Debug.Log("RIFT_MAP_PLAYTEST_OK simulated="+app.Local.Time+" creeps="+creeps.Length+" trees="+BattleMap.Trees.Count+" camps="+BattleMap.Camps.Length+" renderers="+UnityEngine.Object.FindObjectsOfType<Renderer>().Count(r=>r.enabled));
                     var battle=new Match(1);battle.Start();battle.Tick(.05f);battle.Units.Clear();
                     for(int team=0;team<2;team++)for(int i=0;i<4;i++){float sign=team==0?-1:1;var unit=battle.Spawn(Kind.Creep,team,new V2(8*sign+(i-1)*1.2f,8*sign-(i-1)*1.2f));unit.lane=1;unit.waypoint=3;unit.formationSlot=i;unit.hero=i==3?1:0;unit.range=i==3?7:1.8f;unit.hp=unit.maxHp=3000;unit.damage=10;}

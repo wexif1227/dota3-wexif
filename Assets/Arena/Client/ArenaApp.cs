@@ -198,7 +198,7 @@ namespace Rift.Client
         {
             Box(0,0,1600,uiHeight,new Color(.02f,.04f,.05f,.74f));Box(0,0,250,uiHeight,bg);
             Text("R I F T",38,42,200,70,42,gold);Text("THE SHATTERED VALE",40,107,190,30,12,muted);Line(40,155,170);
-            Text("DOTA 3 / COMMUNITY ALPHA",40,uiHeight-90,190,40,11,muted);Text("BUILD 0.3.0   •   UNITY",40,uiHeight-48,190,30,11,muted);
+            Text("DOTA 3 / COMMUNITY ALPHA",40,uiHeight-90,190,40,11,muted);Text("BUILD 0.3.1   •   UNITY",40,uiHeight-48,190,30,11,muted);
             if(Button("ИГРАТЬ",28,200,194,52,menuTab==0))menuTab=0;
             if(Button("ГЕРОИ",28,264,194,52,menuTab==1))menuTab=1;
             if(Button("КАК ИГРАТЬ",28,328,194,52))help=true;
@@ -346,7 +346,7 @@ namespace Rift.Client
             if(Button("СОХРАНИТЬ",390,uiHeight-220,390,50,true)){PlayerPrefs.SetString("endpoint",endpoint);PlayerPrefs.SetFloat("volume",AudioListener.volume);PlayerPrefs.SetInt("quickCast",quickCast?1:0);PlayerPrefs.SetInt("repeatRightClick",repeatRightClick?1:0);PlayerPrefs.SetFloat("cameraSpeed",cameraSpeed);PlayerPrefs.SetInt("graphicsQuality",graphicsQuality);PlayerPrefs.Save();settings=false;}
             if(Button("ГЛАВНОЕ МЕНЮ",820,uiHeight-220,390,50)){Leave();ScreenName="menu";settings=false;}
         }
-        void ApplyQuality(){QualitySettings.shadows=graphicsQuality==0?ShadowQuality.Disable:ShadowQuality.All;QualitySettings.shadowResolution=graphicsQuality==2?ShadowResolution.High:ShadowResolution.Medium;QualitySettings.shadowDistance=graphicsQuality==2?110:75;QualitySettings.antiAliasing=graphicsQuality==0?0:graphicsQuality==2?4:2;}
+        void ApplyQuality(){QualitySettings.shadows=graphicsQuality==0?ShadowQuality.Disable:ShadowQuality.All;QualitySettings.shadowResolution=graphicsQuality==2?ShadowResolution.High:ShadowResolution.Medium;QualitySettings.shadowDistance=graphicsQuality==2?110:75;QualitySettings.antiAliasing=graphicsQuality==0?0:graphicsQuality==2?4:2;foreach(var fx in FindObjectsOfType<ArenaPostProcess>())fx.enabled=graphicsQuality>0;}
         AudioClip Tone(string title,float duration,float frequency,float noise)
         {
             var clip=AudioClip.Create(title,(int)(22050*duration),1,22050,false);var data=new float[clip.samples];var random=new System.Random(42);for(int i=0;i<data.Length;i++){float t=i/22050f,envelope=Mathf.Pow(1-i/(float)data.Length,2);data[i]=((float)(random.NextDouble()*2-1)*noise+Mathf.Sin(2*Mathf.PI*frequency*t*(1-t))*(1-noise))*.2f*envelope;}clip.SetData(data,0);return clip;

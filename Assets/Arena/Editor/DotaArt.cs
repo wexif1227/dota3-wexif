@@ -17,6 +17,7 @@ namespace Rift.Editor
         void OnPreprocessTexture()
         {
             if(!assetPath.Contains("/DotaImported/"))return;var importer=(TextureImporter)assetImporter;importer.maxTextureSize=2048;importer.textureCompression=TextureImporterCompression.CompressedHQ;importer.mipmapEnabled=true;
+            if(assetPath.Contains("/Cursors/")){importer.textureType=TextureImporterType.Cursor;importer.isReadable=true;importer.mipmapEnabled=false;importer.textureCompression=TextureImporterCompression.Uncompressed;importer.alphaIsTransparency=true;return;}
             if(assetPath.Contains("normal_")){importer.textureType=TextureImporterType.NormalMap;importer.sRGBTexture=false;}
         }
     }

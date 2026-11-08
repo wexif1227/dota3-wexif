@@ -7,6 +7,7 @@ namespace Rift.Client
         void BuildArchitecture()
         {
             var water=Shape(PrimitiveType.Cube,"Shallow river","356D78",new Vector3(0,-.74f,0),new Vector3(6.8f,.06f,169),terrainRoot.transform);water.transform.rotation=Quaternion.Euler(0,-45,0);
+            water.GetComponent<Renderer>().sharedMaterial=new Material(Shader.Find("Rift/River"));
             foreach(var route in BattleMap.JungleRoutes)for(int i=1;i<route.Length;i++){PathStrip(route[i-1],route[i],3.4f,"555B49",.045f);PathStrip(route[i-1],route[i],2.35f,"77745D",.075f);}
             foreach(var lane in BattleMap.Lanes)
             {
@@ -55,6 +56,8 @@ namespace Rift.Client
             foreach(var point in BattleMap.Trees)
             {
                 bool dire=point.x+point.y>0;float size=.8f+(float)random.NextDouble()*.65f;
+                var prefab=Resources.Load<GameObject>("DotaImported/World/Tree"+(dire?1:0)+(random.Next(2)==0?"A":"B"));
+                if(prefab){var imported=Instantiate(prefab,terrainRoot.transform);imported.transform.position=Position(point);imported.transform.rotation=Quaternion.Euler(0,(float)random.NextDouble()*360,0);imported.transform.localScale=Vector3.one*size;continue;}
                 var tree=new GameObject(dire?"Dire grove":"Radiant grove").transform;tree.SetParent(terrainRoot.transform);tree.position=Position(point);tree.localScale=Vector3.one*size;
                 Shape(PrimitiveType.Cylinder,"Bark",dire?"524B50":"64543F",new Vector3(0,1.5f,0),new Vector3(.3f,1.5f,.3f),tree);
                 for(int j=0;j<3;j++)

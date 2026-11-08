@@ -99,6 +99,11 @@ namespace Rift.Editor
                 if(stage==12)
                 {
                     var fx=app.World.Models[own.id].GetComponent<CosmeticEffects>();Check(fx.systems.Any(p=>p.particleCount>0),"reactivated model restarts cosmetic emitters");
+                    var motion=app.World.Models[own.id].GetComponent<ImportedHeroMotion>();own.moving=true;own.attacking=false;own.slow=own.haste=own.stun=0;motion.Sync(own);float normalSpeed=motion.player[motion.run].speed;
+                    own.slow=1;motion.Sync(own);Check(motion.player[motion.run].speed<normalSpeed*.7f,"slow reduces skeletal gait speed");
+                    own.stun=1;motion.Sync(own);Check(motion.player[motion.run].speed==0,"stun freezes the current skeletal pose");
+                    own.stun=own.slow=0;own.moving=false;own.cooldown[0]=0;motion.Sync(own);own.cooldown[0]=12;motion.Sync(own);
+                    Check(motion.player.Cast<AnimationState>().Any(s=>s.name.Contains("meathook_start")&&motion.player.IsPlaying(s.name)),"authoritative cooldown starts hook cast animation");
                     File.WriteAllText("artifacts/controls-playtest.txt",checks+" checks passed");Debug.Log("RIFT_CONTROLS_OK "+checks+" checks passed");EditorApplication.update-=Drive;EditorApplication.Exit(0);
                 }
             }

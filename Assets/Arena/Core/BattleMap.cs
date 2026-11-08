@@ -6,6 +6,11 @@ namespace Rift.Core
     {
         public const float Size=120;
         public static readonly V2[] Bases={new V2(-47,-47),new V2(47,47)};
+        public static V2 BaseStructure(int team,int lane,bool barracks)
+        {
+            V2 p=lane==0?new V2(-46,barracks?-37:-32):lane==2?new V2(barracks?-37:-32,-46):new V2(barracks?-38:-34,barracks?-38:-34);
+            return team==0?p:p*-1;
+        }
         public static readonly V2 Roshan=new V2(-13,13);
         public static readonly V2[] Runes={new V2(-22,22),new V2(22,-22)};
         public static readonly V2[] Crossings={new V2(-40,40),new V2(-22,22),new V2(0,0),new V2(22,-22),new V2(40,-40)};

@@ -44,8 +44,8 @@ namespace Rift.Core
                     if(Size==1&&lane!=1)continue;
                     var points=BattleMap.Lanes[lane];
                     for(int tier=0;tier<3;tier++)
-                    {int index=team==0?(tier==0?2:tier==1?1:0):(tier==0?4:tier==1?5:6);var t=Spawn(Kind.Tower,team,points[index]);t.lane=lane;t.waypoint=tier;t.name="Tower "+(tier+1);t.hp=t.maxHp=1100+tier*250;t.damage=80+tier*15;t.range=11;t.armor=10;}
-                    var b=Spawn(Kind.Barracks,team,points[team==0?0:6]+new V2(lane==2?-3:3,lane==0?-3:3));b.lane=lane;b.hp=b.maxHp=1400;b.armor=8;b.name="Barracks";
+                    {int index=team==0?(tier==0?2:tier==1?1:0):(tier==0?4:tier==1?5:6);var position=tier==2?BattleMap.BaseStructure(team,lane,false):points[index];var t=Spawn(Kind.Tower,team,position);t.lane=lane;t.waypoint=tier;t.name="Tower "+(tier+1);t.hp=t.maxHp=1100+tier*250;t.damage=80+tier*15;t.range=11;t.armor=10;}
+                    var b=Spawn(Kind.Barracks,team,BattleMap.BaseStructure(team,lane,true));b.lane=lane;b.hp=b.maxHp=1400;b.armor=8;b.name="Barracks";
                 }
             }
             var roshan=Spawn(Kind.Roshan,2,BattleMap.Roshan);roshan.name="Roshan";roshan.hp=roshan.maxHp=6500;roshan.damage=120;roshan.armor=16;roshan.range=3;roshan.speed=4;

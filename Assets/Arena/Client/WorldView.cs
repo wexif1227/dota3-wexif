@@ -42,6 +42,7 @@ namespace Rift.Client
             var sun=new GameObject("Sun").AddComponent<Light>();sun.type=LightType.Directional;sun.color=new Color(1,.88f,.72f);sun.intensity=1.35f;sun.transform.rotation=Quaternion.Euler(48,-34,0);sun.shadows=LightShadows.Soft;sun.shadowStrength=.65f;QualitySettings.shadowDistance=100;
             Camera=new GameObject("Battle Camera").AddComponent<Camera>();Camera.clearFlags=CameraClearFlags.SolidColor;Camera.orthographic=true;Camera.orthographicSize=25;Camera.nearClipPlane=.1f;Camera.farClipPlane=250;Camera.backgroundColor=new Color(.035f,.065f,.085f);Camera.transform.rotation=Quaternion.Euler(53,0,0);Camera.transform.position=new Vector3(0,50,-39);Camera.gameObject.AddComponent<AudioListener>();Camera.cullingMask=~(1<<8);
             terrainRoot=new GameObject("The Shattered Vale / terrain");Ground();
+            Camera.gameObject.AddComponent<ArenaPostProcess>();
             Shape(PrimitiveType.Cube,"Outer wilderness","263C37",new Vector3(0,-1.4f,0),new Vector3(400,1,400),terrainRoot.transform);
             var rimRandom=new System.Random(97);for(int i=0;i<180;i++){float angle=i*Mathf.PI*2/180;float distance=67+(float)rimRandom.NextDouble()*24;var p=new Vector3(Mathf.Cos(angle)*distance,-.9f,Mathf.Sin(angle)*distance);if(Mathf.Abs(p.x)<61&&Mathf.Abs(p.z)<61)continue;Cone(terrainRoot.transform,p,2+(float)rimRandom.NextDouble()*2,5+(float)rimRandom.NextDouble()*6,Mat(i%2==0?"344B46":"415750"),6);}
             BuildArchitecture();
@@ -74,8 +75,9 @@ namespace Rift.Client
         void PathStrip(V2 a,V2 b,float width,string color,float lift=.04f)
         {
             int n=Mathf.CeilToInt(V2.Distance(a,b)/2);V2 dir=(b-a).Normal,side=new V2(-dir.y,dir.x)*width*.5f;
-            var v=new Vector3[(n+1)*2];var t=new int[n*6];for(int i=0;i<=n;i++){V2 p=a+(b-a)*(i/(float)n);v[i*2]=Position(p-side,lift);v[i*2+1]=Position(p+side,lift);if(i<n){int k=i*6,j=i*2;t[k]=j;t[k+1]=j+1;t[k+2]=j+2;t[k+3]=j+1;t[k+4]=j+3;t[k+5]=j+2;}}
-            var mesh=new Mesh{vertices=v,triangles=t};mesh.RecalculateNormals();var obj=new GameObject("Stone lane",typeof(MeshFilter),typeof(MeshRenderer));obj.transform.SetParent(terrainRoot.transform);obj.GetComponent<MeshFilter>().sharedMesh=mesh;obj.GetComponent<MeshRenderer>().sharedMaterial=Mat(color);
+            var v=new Vector3[(n+1)*2];var uv=new Vector2[v.Length];var t=new int[n*6];for(int i=0;i<=n;i++){V2 p=a+(b-a)*(i/(float)n);v[i*2]=Position(p-side,lift);v[i*2+1]=Position(p+side,lift);float along=V2.Distance(a,b)*i/n;uv[i*2]=new Vector2(0,along);uv[i*2+1]=new Vector2(width,along);if(i<n){int k=i*6,j=i*2;t[k]=j;t[k+1]=j+1;t[k+2]=j+2;t[k+3]=j+1;t[k+4]=j+3;t[k+5]=j+2;}}
+            string key="path"+color+(width>=3.8f?"stone":"earth");if(!materials.TryGetValue(key,out var material)){ColorUtility.TryParseHtmlString("#"+color,out var tint);material=new Material(Shader.Find("Rift/Path")){color=tint};material.SetFloat("_Paving",width>=3.8f?1:0);materials[key]=material;}
+            var mesh=new Mesh{vertices=v,triangles=t,uv=uv};mesh.RecalculateNormals();var obj=new GameObject("Stone lane",typeof(MeshFilter),typeof(MeshRenderer));obj.transform.SetParent(terrainRoot.transform);obj.GetComponent<MeshFilter>().sharedMesh=mesh;obj.GetComponent<MeshRenderer>().sharedMaterial=material;
         }
         void Batch(GameObject root)
         {
@@ -144,6 +146,14 @@ namespace Rift.Client
         }
         GameObject Model(Unit u)
         {
+            string key=u.kind==Kind.Tower?"Tower"+u.team:u.kind==Kind.Ancient?"Ancient"+u.team:u.kind==Kind.Barracks?"Barracks"+u.team:u.kind==Kind.Creep?"Creep"+u.team+(u.range>3?"R":"M"):u.kind==Kind.Roshan?"Roshan":u.kind==Kind.Courier?"Courier":u.kind==Kind.Ward?"Ward":null;
+            var importedPrefab=key==null?null:Resources.Load<GameObject>("DotaImported/World/"+key);
+            if(importedPrefab)
+            {
+                var imported=Instantiate(importedPrefab);string color=u.team==0?"7BC4AA":u.team==1?"D48275":"C9A56B";
+                float radius=u.kind==Kind.Creep?.68f:u.kind==Kind.Ancient?3.2f:u.kind==Kind.Tower?1.9f:u.kind==Kind.Barracks?1.8f:u.kind==Kind.Roshan?2.1f:1;
+                Ring(imported.transform,new Vector3(0,.08f,0),radius,.09f,Mat(color,true));return imported;
+            }
             GameObject g=u.kind==Kind.Hero?HeroModel(u.hero,u.team):new GameObject(u.kind.ToString());var r=g.transform;string team=u.team==0?"7BC4AA":u.team==1?"D48275":"C9A56B";
             if(u.kind==Kind.Tower){Shape(PrimitiveType.Cylinder,"Foundation","707B7D",new Vector3(0,.4f,0),new Vector3(4,.4f,4),r);Shape(PrimitiveType.Cube,"Tower",team,new Vector3(0,2,0),new Vector3(2.3f,3.8f,2.3f),r);Cone(r,new Vector3(0,4,0),1.9f,2,Mat("3D515D"),4);Shape(PrimitiveType.Sphere,"Beacon",team,new Vector3(0,5.5f,0),Vector3.one*.9f,r,true);}
             if(u.kind==Kind.Ancient){Shape(PrimitiveType.Cylinder,"Ancient dais","6D7884",new Vector3(0,.5f,0),new Vector3(8,.5f,8),r);for(int i=0;i<5;i++){float a=i*Mathf.PI*2/5;Cone(r,new Vector3(Mathf.Cos(a)*2,1,Mathf.Sin(a)*2),1.3f,3+i%2,Mat(team,true),5);}Cone(r,Vector3.up,2,7,Mat(team,true),6);}
@@ -166,7 +176,7 @@ namespace Rift.Client
                 var allies=snapshot.units.Where(u=>u.team==team&&!u.dead&&u.kind!=Kind.Trap&&u.kind!=Kind.Web).ToArray();
                 var pixels=new Color[96*96];for(int y=0;y<96;y++)for(int x=0;x<96;x++){V2 p=new V2(x/95f*120-60,y/95f*120-60);float vis=0;foreach(var u in allies){float range=u.kind==Kind.Ward?17:u.kind==Kind.Hero?20:12;vis=Mathf.Max(vis,Mathf.Clamp01((range-V2.Distance(p,u.pos))/3));}pixels[y*96+x]=new Color(vis,vis,vis);}vision.SetPixels(pixels);vision.Apply();
             }
-            current.Clear();foreach(var u in snapshot.units){current[u.id]=u;if(!Models.ContainsKey(u.id)){var g=Model(u);g.transform.position=Position(u.pos);Models[u.id]=g;}var model=Models[u.id];var imported=model.GetComponent<ImportedHeroMotion>();model.SetActive(!u.dead||imported&&imported.VisibleWhileDead);}
+            current.Clear();foreach(var u in snapshot.units){current[u.id]=u;if(!Models.ContainsKey(u.id)){var g=Model(u);g.transform.position=Position(u.pos);g.AddComponent<UnitVisualState>();Models[u.id]=g;}var model=Models[u.id];var imported=model.GetComponent<ImportedHeroMotion>();model.SetActive(!u.dead||imported&&imported.VisibleWhileDead);model.GetComponent<UnitVisualState>()?.Sync(u);}
             foreach(var pair in Models.ToArray())if(!current.ContainsKey(pair.Key)){Destroy(pair.Value);Models.Remove(pair.Key);}
             foreach(var e in snapshot.effects)if(effects.Add(e.id))ShowEffect(e);
             if(effects.Count>4000)effects.Clear();
@@ -193,7 +203,7 @@ namespace Rift.Client
         {
             foreach(var pair in current)
             {
-                if(!Models.TryGetValue(pair.Key,out var model)||!model.activeSelf)continue;var u=pair.Value;var pos=Position(u.pos);if(u.kind==Kind.Creep)pos.y+=Mathf.Sin(UnityEngine.Time.time*7+u.id)*(u.moving?.09f:.025f);
+                if(!Models.TryGetValue(pair.Key,out var model)||!model.activeSelf)continue;var u=pair.Value;var pos=Position(u.pos);if(u.kind==Kind.Creep&&!model.GetComponent<ImportedHeroMotion>())pos.y+=Mathf.Sin(UnityEngine.Time.time*7+u.id)*(u.moving?.09f:.025f);
                 model.transform.position=Vector3.Lerp(model.transform.position,pos,1-Mathf.Exp(-UnityEngine.Time.deltaTime*15));
                 var soldier=model.GetComponent<CreepMotion>();if(soldier)soldier.Sync(u);
                 var motion=model.GetComponent<HeroMotion>();if(motion)motion.Sync(u);

@@ -18,7 +18,7 @@ namespace Rift.Client
         public int HoveredUnitId=>hoveredUnit;
         public Vector3 CameraFocus=>cameraFocus;
         bool CanOrderHero=>mobile||Me!=null&&selectedUnit==Me.id;
-        void ResetDesktop(){selectedUnit=-1;hoveredUnit=0;selecting=attackMode=false;lastRightType="";nextRightOrder=0;Cursor.SetCursor(null,Vector2.zero,CursorMode.Auto);}
+        void ResetDesktop(){selectedUnit=-1;hoveredUnit=0;selecting=attackMode=false;lastRightType="";nextRightOrder=0;MinifyCursors.Reset();}
         public void FocusHero()
         {
             if(Me==null)return;selectedUnit=Me.id;armed=itemArmed=-1;attackMode=selecting=false;follow=false;
@@ -55,6 +55,8 @@ namespace Rift.Client
             bool inside=mouse.x>=0&&mouse.y>=0&&mouse.x<=Screen.width&&mouse.y<=Screen.height;
             var hover=inside&&!OverUI(mouse)?World.PickUnit(mouse):null;hoveredUnit=hover?.id??0;
             if(CanOrderHero&&frame.attackPressed){armed=itemArmed=-1;attackMode=true;}
+            bool ui=inside&&OverUI(mouse);string relation=hover==null||Me==null?"":hover.team==Me.team?"_team":"_enemy";
+            MinifyCursors.Set(!frame.focused||!inside||ui?"default":armed>=0||itemArmed>=0?"spell"+(relation==""?"_default":relation):attackMode?"attack"+(relation==""?"_default":relation):frame.rightHeld&&hover==null?"move":"default"+relation);
             if(!frame.focused||!inside){selecting=false;return;}
             if(frame.leftReleased&&selecting)
             {

@@ -9,6 +9,9 @@ public static class BehaviorChecks
     }
     public static void Run(Action<bool,string> check)
     {
+        var fortress=new Match(5);fortress.Start();var buildings=fortress.Units.Where(u=>u.kind==Kind.Tower||u.kind==Kind.Barracks||u.kind==Kind.Ancient).ToArray();
+        check(buildings.All(a=>buildings.Where(b=>b.id!=a.id).All(b=>V2.Distance(a.pos,b.pos)>4.5f)),"base buildings have separate footprints and do not share spawn points");
+        check(buildings.All(b=>BattleMap.Walkable(b.pos)),"all separated base buildings stand on accessible ground");
         foreach(var camp in BattleMap.Camps)check(BattleMap.Path(BattleMap.Bases[0],camp).Count>0&&BattleMap.Path(BattleMap.Bases[1],camp).Count>0,"both teams can reach camp "+camp.x+","+camp.y);
         foreach(var line in BattleMap.Lanes)for(int i=1;i<line.Length;i++)check(BattleMap.Path(line[i-1],line[i]).Count>0,"lane segment is connected");
         check(BattleMap.Path(BattleMap.Bases[0],BattleMap.Roshan).Count>0&&BattleMap.Path(BattleMap.Bases[1],BattleMap.Roshan).Count>0,"Roshan pit has a reachable entrance");

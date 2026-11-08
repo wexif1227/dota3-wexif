@@ -22,7 +22,7 @@ int nextPlayer=0;
 int maxRooms=int.TryParse(Environment.GetEnvironmentVariable("MAX_ROOMS"),out var limit)?Math.Clamp(limit,1,50):8;
 app.UseWebSockets(new WebSocketOptions{KeepAliveInterval=TimeSpan.FromSeconds(20)});
 app.MapGet("/",()=>Results.Content("RIFT / Dota3 community alpha server. GET /health, WebSocket /ws. No accounts or payments.","text/plain"));
-app.MapGet("/health",()=>Results.Json(new{status="ok",version="0.3.0",rooms=rooms.Count,protocol=1,attackWindup=true,unitCollision=true,tacticalBots=true,mapRevision=2}));
+app.MapGet("/health",()=>Results.Json(new{status="ok",version="0.3.1",rooms=rooms.Count,protocol=1,attackWindup=true,unitCollision=true,tacticalBots=true,mapRevision=3}));
 app.Map("/ws",async context=>
 {
     if(!context.WebSockets.IsWebSocketRequest){context.Response.StatusCode=400;return;}

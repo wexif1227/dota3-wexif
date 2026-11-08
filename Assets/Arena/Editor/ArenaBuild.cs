@@ -25,6 +25,7 @@ namespace Rift.Editor
                 else if(command=="android")Android();
                 else if(command=="art")ArtAssets.Bake();
                 else if(command=="dota")DotaArt.Bake();
+                else if(command=="world")WorldArt.Bake();
                 else if(command=="play"){Setup();EditorApplication.isPlaying=true;}
                 else if(command=="stop")EditorApplication.isPlaying=false;
                 else if(command=="smoke"&&Rift.Client.ArenaApp.Instance)Rift.Client.ArenaApp.Instance.StartLocal();
@@ -45,7 +46,7 @@ namespace Rift.Editor
             }
             else if(!EditorApplication.isPlaying)EditorSceneManager.OpenScene(scenePath);
             EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(scenePath,true)};
-            PlayerSettings.companyName="Wexif";PlayerSettings.productName="Rift — Dota3 Alpha";PlayerSettings.bundleVersion="0.3.0";
+            PlayerSettings.companyName="Wexif";PlayerSettings.productName="Rift — Dota3 Alpha";PlayerSettings.bundleVersion="0.3.1";
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android,"com.wexif.riftalpha");
             PlayerSettings.defaultScreenWidth=1600;PlayerSettings.defaultScreenHeight=900;PlayerSettings.fullScreenMode=FullScreenMode.FullScreenWindow;
             PlayerSettings.defaultInterfaceOrientation=UIOrientation.LandscapeLeft;PlayerSettings.runInBackground=true;
@@ -54,7 +55,7 @@ namespace Rift.Editor
             PlayerSettings.Android.forceInternetPermission=true;
             var graphics=new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]);var list=graphics.FindProperty("m_AlwaysIncludedShaders");
             for(int i=list.arraySize-1;i>=0;i--){var existing=list.GetArrayElementAtIndex(i).objectReferenceValue as Shader;if(existing&&existing.name=="Standard"){list.GetArrayElementAtIndex(i).objectReferenceValue=null;list.DeleteArrayElementAtIndex(i);}}
-            foreach(string name in new[]{"Rift/Terrain","Rift/Lit","Rift/Hero","Rift/Dota","Rift/DotaTransparent","Rift/CosmeticParticle","Sprites/Default"})
+            foreach(string name in new[]{"Rift/Terrain","Rift/Lit","Rift/Hero","Rift/Dota","Rift/DotaTransparent","Rift/CosmeticParticle","Rift/Atmosphere","Rift/River","Rift/Path","Sprites/Default"})
             {
                 var shader=Shader.Find(name);if(!shader)continue;bool found=false;for(int i=0;i<list.arraySize;i++)if(list.GetArrayElementAtIndex(i).objectReferenceValue==shader)found=true;
                 if(!found){int index=list.arraySize;list.InsertArrayElementAtIndex(index);list.GetArrayElementAtIndex(index).objectReferenceValue=shader;}
